@@ -1,0 +1,10 @@
+[package]
+name = "magnifier"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.9", features = ["derive"] }
+lazy_static = "1.5.0"
+rusqlite = "0.31.0"
+walkdir = "2.5.0"
