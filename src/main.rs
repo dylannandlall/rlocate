@@ -10,10 +10,14 @@ mod db;
 #[derive(Parser, Debug)]
 #[clap(author = "Dylan Nandlall", version="0.1.0", about)]
 /// A Simple File Searcher written in Rust
-struct Args {
+struct Cli {
     /// Keyword to search
-    keyword: String,
-    mode: i32,
+    #[arg(short, long, group = "file", conflicts_with = "basename")]
+    keyword: Option<String>,
+    #[arg(short, conflicts_with = "file")]
+    mode: Option<String>,
+    #[arg(short, long, group = "file")]
+    basename: Option<String>,
 }
 
 
@@ -84,19 +88,32 @@ fn debug_db() {
 fn main() {
     let now = Instant::now();
 
-    let args = Args::parse();
+    let args = Cli::parse();
 
-    match args.mode {
-        0 => {
-            initialize();
-            // locate_keyword(args.keyword);
-        },
-        1 => locate_keyword(args.keyword),
-        2 => locate_keyword_basename(args.keyword),
-        -1 => debug_db(),
-        -2 => reset(),
-        _ => println!("Enter a valid mode")
-    };
+    match args.mode.as_deref() {
+        None => {}
+        Some(command) => {
+            match command {
+                "init" => initialize(),
+                "debug" => debug_db(),
+                "reset" => reset(),
+                _ => {
+                    println!("Enter a valid mode");
+                    return;
+                }
+            }
+            
+        }
+    }
+
+    if args.keyword.is_some() {
+        locate_keyword(args.keyword.unwrap());
+    }
+    
+    if args.basename.is_some() {
+        locate_keyword_basename(args.basename.unwrap());
+    }
+
 
     let elapsed = now.elapsed();
     println!("Program Runtime: {:?}", elapsed);

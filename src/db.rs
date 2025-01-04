@@ -1,11 +1,14 @@
 use std::{fs, path::PathBuf};
+use dirs;
 use walkdir::DirEntry;
 
 use rusqlite::{self, params, Connection, Result, Transaction};
 
 
-// static DATABASE_PATH: &'static str = "/var/lib/rlocate/db.sql";
-static DATABASE_PATH: &'static str = "/home/cross/db.sql";
+fn get_db_path() -> PathBuf {
+    let db_path = dirs::home_dir().unwrap().join("db.sql");
+    return db_path;
+}
 
 #[derive(Debug)]
 pub struct PathEntry {
@@ -24,7 +27,7 @@ impl PathEntry {
 }
 
 pub fn init_db() -> Result<()> {
-    let conn: Connection = Connection::open(DATABASE_PATH)?;
+    let conn: Connection = Connection::open(get_db_path())?;
     
     conn.execute(
         "CREATE TABLE entry (
@@ -68,7 +71,7 @@ fn insert_batch(entries: Vec<DirEntry>, tx: &Transaction) -> Result<()> {
 
 pub fn retrieve_entries() -> Vec<PathEntry> {
     let mut entries: Vec<PathEntry> = Vec::new();
-    let conn: Connection = Connection::open(DATABASE_PATH).unwrap();
+    let conn: Connection = Connection::open(get_db_path()).unwrap();
 
     let mut stmt = conn.prepare("SELECT path, basename from entry").unwrap();
     let entry_iter = stmt.query_map([], |row| {
@@ -86,7 +89,7 @@ pub fn retrieve_entries() -> Vec<PathEntry> {
 }
 
 pub fn insert_entries(entries: Vec<DirEntry>) -> Result<()> {
-    let mut conn: Connection = Connection::open(DATABASE_PATH)?;
+    let mut conn: Connection = Connection::open(get_db_path())?;
     let tx = conn.transaction()?; 
 
     insert_batch(entries, &tx)?;
@@ -96,7 +99,7 @@ pub fn insert_entries(entries: Vec<DirEntry>) -> Result<()> {
 }
 
 pub fn print_entries() -> Result<()> {
-    let conn: Connection = Connection::open(DATABASE_PATH)?;
+    let conn: Connection = Connection::open(get_db_path())?;
 
     let mut stmt = conn.prepare("SELECT path, basename from entry")?;
     let entry_iter = stmt.query_map([], |row| {
@@ -114,7 +117,7 @@ pub fn print_entries() -> Result<()> {
 }
 
 pub fn delete_db() -> std::io::Result<()> {
-    fs::remove_file(DATABASE_PATH)?;
+    fs::remove_file(get_db_path())?;
 
     Ok(())
 }
