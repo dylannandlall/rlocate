@@ -9,6 +9,7 @@ mod db;
 
 
 #[derive(Parser, Debug)]
+#[command(arg_required_else_help(true))]
 #[clap(author = "Dylan Nandlall", version="0.1.0", about)]
 /// A Simple File Searcher written in Rust
 struct Cli {
