@@ -1,12 +1,12 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::{Path, PathBuf}};
 use dirs;
 use walkdir::DirEntry;
-
 use rusqlite::{self, params, Connection, Result, Transaction};
 
+// const TABLE_NAME: &str = "entries";
 
 fn get_db_path() -> PathBuf {
-    let db_path = dirs::home_dir().unwrap().join("db.sql");
+    let db_path = dirs::data_dir().unwrap().join("rlocate/db.sql"); 
     return db_path;
 }
 
@@ -27,22 +27,44 @@ impl PathEntry {
 }
 
 pub fn init_db() -> Result<()> {
+    let database_path: PathBuf = get_db_path();
+    let parent_database_path: &Path = database_path.parent().unwrap(); 
+
+
+    if std::path::Path::is_dir(&parent_database_path) == false {
+        match std::fs::create_dir(database_path.parent().unwrap()) {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("[Error] Could not create database folder at {}: {}", parent_database_path.display(), e);
+                std::process::exit(1);
+            }
+        }
+    }
+
     let conn: Connection = Connection::open(get_db_path())?;
-    
-    conn.execute(
-        "CREATE TABLE entry (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                path        TEXT NOT NULL,
-                basename    TEXT NOT NULL
-            )"
-        ,(),
-    )?;
-    
+
+    if check_if_table_exists().unwrap() == false {
+        conn.execute(
+            "CREATE TABLE entries (
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    path        TEXT NOT NULL,
+                    basename    TEXT NOT NULL
+                )"
+            , (),
+        )?;
+    }
     Ok(())
 }
 
+pub fn check_if_table_exists() -> Result<bool> {
+    let conn: Connection = Connection::open(get_db_path())?; 
+
+    let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name= ?1")?; 
+    stmt.exists(["entries"])
+}
+
 fn insert_batch(entries: Vec<DirEntry>, tx: &Transaction) -> Result<()> {
-    let mut stmt = tx.prepare("INSERT INTO entry (path, basename) VALUES (?1, ?2)")?;
+    let mut stmt = tx.prepare("INSERT INTO entries (path, basename) VALUES (?1, ?2)")?;
 
     for entry in entries {
         let e = PathEntry {
@@ -73,7 +95,7 @@ pub fn retrieve_entries() -> Vec<PathEntry> {
     let mut entries: Vec<PathEntry> = Vec::new();
     let conn: Connection = Connection::open(get_db_path()).unwrap();
 
-    let mut stmt = conn.prepare("SELECT path, basename from entry").unwrap();
+    let mut stmt = conn.prepare("SELECT path, basename from entries").unwrap();
     let entry_iter = stmt.query_map([], |row| {
         Ok(PathEntry {
             path: row.get(0)?,
@@ -101,7 +123,7 @@ pub fn insert_entries(entries: Vec<DirEntry>) -> Result<()> {
 pub fn print_entries() -> Result<()> {
     let conn: Connection = Connection::open(get_db_path())?;
 
-    let mut stmt = conn.prepare("SELECT path, basename from entry")?;
+    let mut stmt = conn.prepare("SELECT path, basename from entries")?;
     let entry_iter = stmt.query_map([], |row| {
         Ok(PathEntry {
             path: row.get(0)?,
@@ -118,6 +140,5 @@ pub fn print_entries() -> Result<()> {
 
 pub fn delete_db() -> std::io::Result<()> {
     fs::remove_file(get_db_path())?;
-
     Ok(())
 }

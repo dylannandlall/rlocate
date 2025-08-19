@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 clap = { version = "4.5.9", features = ["derive"] }
+dirs = "6.0.0"
 lazy_static = "1.5.0"
 rusqlite = "0.31.0"
 walkdir = "2.5.0"

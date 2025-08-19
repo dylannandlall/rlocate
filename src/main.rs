@@ -1,6 +1,7 @@
 use core::panic;
 use std::time::Instant;
-use clap::{Arg, Parser};
+use clap::{Args, Parser, Subcommand};
+use rusqlite::Result;
 use walkdir::DirEntry;
 
 mod dir;
@@ -12,6 +13,22 @@ mod db;
 /// A Simple File Searcher written in Rust
 struct Cli {
     /// Keyword to search
+    #[command(subcommand)]
+    command: Option<Commands>,
+    #[command(flatten)]
+    search: SearchArgs,
+}
+
+#[derive(Subcommand, Debug)]
+enum Commands {
+    Updatedb,
+    Init,
+    Debug,
+    Reset,
+}
+
+#[derive(Args, Debug)]
+struct SearchArgs {
     #[arg(short, long, group = "file", conflicts_with = "basename")]
     keyword: Option<String>,
     #[arg(short, conflicts_with = "file")]
@@ -20,23 +37,37 @@ struct Cli {
     basename: Option<String>,
 }
 
-
-
+/// Initializes the file database and adds entries to it
 fn initialize() { 
-    match db::init_db() {
-        Ok(_) => {}
-        Err(err) => {
-            println!("Cannot initialize database: {}", err);
-            panic!();
+    if db::check_if_table_exists().unwrap() == false  {
+        match db::init_db() {
+            Ok(_) => {}
+            Err(err) => {
+                println!("Cannot initialize database: {}", err);
+                std::process::exit(1);
+            }
+        }
+
+        let entries: Vec<DirEntry> = dir::get_filepaths(); 
+
+        match db::insert_entries(entries) {
+            Ok(_) => {}
+            Err(err) => {
+                println!("Could not insert entries: {}", err);
+                std::process::exit(1);
+            }
         }
     }
+}
 
+fn update_db() {
     let entries: Vec<DirEntry> = dir::get_filepaths(); 
 
     match db::insert_entries(entries) {
         Ok(_) => {}
         Err(err) => {
-            println!("Could not insert entries: {}", err);
+            println!("[Error] Could not update database: {}", err);
+            std::process::exit(1);
         }
     }
 }
@@ -90,28 +121,52 @@ fn main() {
 
     let args = Cli::parse();
 
-    match args.mode.as_deref() {
-        None => {}
-        Some(command) => {
-            match command {
-                "init" => initialize(),
-                "debug" => debug_db(),
-                "reset" => reset(),
-                _ => {
-                    println!("Enter a valid mode");
-                    return;
-                }
+    if let Some(command) = args.command {
+        match command {
+            Commands::Updatedb => {
+                println!("Running the updatedb logic...");
+                update_db(); 
+                println!("Scanning filesystem and refreshing database... Done.");
+            },
+
+            Commands::Init => {
+                println!("Initializing the database...");
+                initialize();
+                println!("Database initialized");
             }
-            
+
+            Commands::Debug => {
+                debug_db();
+            }
+
+            Commands::Reset => {
+                reset();
+            }
         }
     }
 
-    if args.keyword.is_some() {
-        locate_keyword(args.keyword.unwrap());
+    // match args.search.mode.as_deref() {
+    //     None => {}
+    //     Some(command) => {
+    //         match command {
+    //             "init" => initialize(),
+    //             "debug" => debug_db(),
+    //             "reset" => reset(),
+    //             _ => {
+    //                 println!("Enter a valid mode");
+    //                 return;
+    //             }
+    //         }
+            
+    //     }
+    // }
+
+    if args.search.keyword.is_some() {
+        locate_keyword(args.search.keyword.unwrap());
     }
     
-    if args.basename.is_some() {
-        locate_keyword_basename(args.basename.unwrap());
+    if args.search.basename.is_some() {
+        locate_keyword_basename(args.search.basename.unwrap());
     }
 
 
