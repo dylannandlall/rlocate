@@ -1,7 +1,5 @@
-use core::panic;
 use std::time::Instant;
 use clap::{Args, Parser, Subcommand};
-use rusqlite::Result;
 use walkdir::DirEntry;
 
 mod dir;
@@ -23,10 +21,10 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
     Updatedb,
-    Init,
     Debug,
     Reset,
 }
+
 
 #[derive(Args, Debug)]
 struct SearchArgs {
@@ -36,41 +34,6 @@ struct SearchArgs {
     mode: Option<String>,
     #[arg(short, long, group = "file")]
     basename: Option<String>,
-}
-
-/// Initializes the file database and adds entries to it
-fn initialize() { 
-    if db::check_if_table_exists().unwrap() == false  {
-        match db::init_db() {
-            Ok(_) => {}
-            Err(err) => {
-                println!("Cannot initialize database: {}", err);
-                std::process::exit(1);
-            }
-        }
-
-        let entries: Vec<DirEntry> = dir::get_filepaths(); 
-
-        match db::insert_entries(entries) {
-            Ok(_) => {}
-            Err(err) => {
-                println!("Could not insert entries: {}", err);
-                std::process::exit(1);
-            }
-        }
-    }
-}
-
-fn update_db() {
-    let entries: Vec<DirEntry> = dir::get_filepaths(); 
-
-    match db::insert_entries(entries) {
-        Ok(_) => {}
-        Err(err) => {
-            println!("[Error] Could not update database: {}", err);
-            std::process::exit(1);
-        }
-    }
 }
 
 fn locate_keyword_basename(keyword: String) {
@@ -109,14 +72,6 @@ fn locate_keyword(keyword: String) {
     }
 }
 
-fn reset() {
-    db::delete_db();
-}
-
-fn debug_db() {
-    db::print_entries();
-}
-
 fn main() {
     let now = Instant::now();
 
@@ -126,42 +81,21 @@ fn main() {
         match command {
             Commands::Updatedb => {
                 println!("Running the updatedb logic...");
-                update_db(); 
+                let entries = dir::get_filepaths(); 
+                db::update_database(entries);
                 println!("Scanning filesystem and refreshing database... Done.");
-            },
-
-            Commands::Init => {
-                println!("Initializing the database...");
-                initialize();
-                println!("Database initialized");
             }
 
             Commands::Debug => {
-                debug_db();
+                db::print_entries(); 
             }
 
             Commands::Reset => {
-                reset();
+                db::delete_db();
             }
         }
     }
-
-    // match args.search.mode.as_deref() {
-    //     None => {}
-    //     Some(command) => {
-    //         match command {
-    //             "init" => initialize(),
-    //             "debug" => debug_db(),
-    //             "reset" => reset(),
-    //             _ => {
-    //                 println!("Enter a valid mode");
-    //                 return;
-    //             }
-    //         }
-            
-    //     }
-    // }
-
+    
     if args.search.keyword.is_some() {
         locate_keyword(args.search.keyword.unwrap());
     }
