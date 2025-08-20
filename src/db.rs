@@ -110,7 +110,7 @@ pub fn database_search(pattern: String, pattern_type: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn update_database(entries: Vec<DirEntry>, conn: &mut Connection) -> Result<()> {
+fn update_database(entries: Vec<DirEntry>, conn: &mut Connection) -> Result<()> {
 
     if let Some(database_parent_path) = DATABASE_FILE_PATH.parent() {
         // this is technology
@@ -196,7 +196,7 @@ fn insert_batch(entries: Vec<DirEntry>, tx: &Transaction) -> Result<()> {
     Ok(())
 }
 
-pub fn retrieve_entries(conn: &Connection) -> Result<Vec<PathEntry>> {
+fn retrieve_entries(conn: &Connection) -> Result<Vec<PathEntry>> {
     let mut entries: Vec<PathEntry> = Vec::new();
     let mut stmt = conn.prepare("SELECT path, basename from entries").unwrap();
     let entry_iter = stmt.query_map([], |row| {
@@ -214,7 +214,7 @@ pub fn retrieve_entries(conn: &Connection) -> Result<Vec<PathEntry>> {
     Ok(entries)
 }
 
-pub fn insert_entries(entries: Vec<DirEntry>, conn: &mut Connection) -> Result<()> {
+fn insert_entries(entries: Vec<DirEntry>, conn: &mut Connection) -> Result<()> {
     let tx = conn.transaction()?; 
 
     insert_batch(entries, &tx)?;
@@ -240,7 +240,7 @@ fn print_entries(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-pub fn delete_db() -> std::io::Result<()> {
+fn delete_db() -> std::io::Result<()> {
     fs::remove_file(DATABASE_FILE_PATH.as_os_str())?;
     Ok(())
 }
