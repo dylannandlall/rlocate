@@ -12,11 +12,6 @@ cd ./target/release
 ./rlocate 
 ```
 
-To initialize the database that rlocate uses run this:
-```shell
-./rlocate init
-```
-
 To update the database at any time, run this:
 ```shell
 ./rlocate updatedb
