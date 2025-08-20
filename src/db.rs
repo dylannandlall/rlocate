@@ -1,4 +1,4 @@
-use std::{fs, path::{Path, PathBuf}, process};
+use std::{fs, path::{PathBuf}, process};
 use dirs;
 use walkdir::DirEntry;
 use rusqlite::{self, params, Connection, Result, Transaction};
@@ -26,12 +26,91 @@ impl PathEntry {
     }
 }
 
-pub fn get_database_connection () -> Result<Connection> {
+pub fn database_handler(entries_opt: Option<Vec<DirEntry>>, command: &str) -> Result<()> {
     let mut conn: Connection = Connection::open(DATABASE_FILE_PATH.as_os_str())?;
-    Ok(conn)
+
+    match command {
+        "updatedb" => {
+            if let Some(entries) = entries_opt {
+                update_database(entries, &mut conn)?; 
+            } else {
+                eprintln!(
+                    "[Error] Entries are null cannot update database");
+                process::exit(1) 
+            }
+        }
+
+        "debug" => {
+            print_entries(&conn)?;
+        }
+
+        "reset" => {
+            match delete_db() {
+                Ok(_) => {}
+                Err(e) => {
+                    eprintln!(
+                        "[Error] Could not delete database at {}: {}", DATABASE_FILE_PATH.display(), e);
+                    process::exit(1) 
+                }
+            }
+        }
+
+        _ => {
+            eprintln!(
+                "[Error] Database command not recognized {}", command);
+            process::exit(1) 
+        }
+    }
+    Ok(())
 }
 
-pub fn update_database(entries: Vec<DirEntry>) -> Result<Connection> {
+pub fn database_search(pattern: String, pattern_type: &str) -> Result<()> {
+    let conn: Connection = Connection::open(DATABASE_FILE_PATH.as_os_str()).expect("Could not open up database connection");
+    let database_entries: Vec<PathEntry> = retrieve_entries(&conn)?;
+
+    match pattern_type {
+        "keyword" => {
+            for entry in database_entries {
+                let entry = entry.get_path();
+                if entry.contains(&pattern) {
+                    let start = entry.find(&pattern).unwrap();
+                    let (left, right) = entry.split_at(start);
+                    let (middle, right) = right.split_at(pattern.len());
+
+                    println!("{}\x1b[31m{}\x1b[0m{}", left, middle, right);
+                }
+            }
+        }
+
+        "basename" => {
+            for entry in database_entries {
+                let basename = entry.get_basename(); 
+                
+                if basename == pattern {
+                    // We need to split the string on "/" and get a vector of string types
+                    let directory: Vec<String> = entry.get_path()
+                                                .split("/")
+                                                .map(str::to_string)
+                                                .collect();
+                    let directory = &directory[..directory.len() - 1].join("/");
+                    let directory = format!("{directory}/");
+
+                    println!("{}\x1b[31m{}\x1b[0m", directory, basename);
+                }
+            }
+        }
+
+        _ => {
+            eprintln!(
+                "[Error] Search command not recognized {}", pattern_type);
+            process::exit(1) 
+        }
+    }
+
+    Ok(())
+}
+
+pub fn update_database(entries: Vec<DirEntry>, conn: &mut Connection) -> Result<()> {
 
     if let Some(database_parent_path) = DATABASE_FILE_PATH.parent() {
         // this is technology
@@ -51,7 +130,7 @@ pub fn update_database(entries: Vec<DirEntry>) -> Result<Connection> {
         process::exit(1);
     }
 
-    let mut conn: Connection = Connection::open(DATABASE_FILE_PATH.as_os_str())?;
+    // let mut conn: Connection = Connection::open(DATABASE_FILE_PATH.as_os_str())?;
     // Helps limit the scope of stmt to allow conn to be released from being borrowed after it is used in stmt 
     // and be moved to Ok() to be return in a Result enum
     {
@@ -77,8 +156,8 @@ pub fn update_database(entries: Vec<DirEntry>) -> Result<Connection> {
         };
     }
 
-    match insert_entries(entries, &mut conn) {
-        Ok(_) => println!("rlocate successfully updated database with current filepath information"),
+    match insert_entries(entries, conn) {
+        Ok(_) => println!("Database updated"),
         Err(e) => {
             eprintln!(
                     "[Error] Could not update filepath database: {}", e);
@@ -86,53 +165,8 @@ pub fn update_database(entries: Vec<DirEntry>) -> Result<Connection> {
         }
     }
 
-    Ok(conn)
+    Ok(())
 }
-
-
-
-
-// fn get_db_path() -> PathBuf {
-//     let db_path = dirs::data_dir().unwrap().join("rlocate/db.sql"); 
-//     return db_path;
-// }
-
-// pub fn init_db() -> Result<()> {
-//     let database_path: PathBuf = get_db_path();
-//     let parent_database_path: &Path = database_path.parent().unwrap(); 
-
-
-//     if std::path::Path::is_dir(&parent_database_path) == false {
-//         match std::fs::create_dir(database_path.parent().unwrap()) {
-//             Ok(_) => {}
-//             Err(e) => {
-//                 eprintln!("[Error] Could not create database folder at {}: {}", parent_database_path.display(), e);
-//                 std::process::exit(1);
-//             }
-//         }
-//     }
-
-//     let conn: Connection = Connection::open(get_db_path())?;
-
-//     if check_if_table_exists().unwrap() == false {
-//         conn.execute(
-//             "CREATE TABLE entries (
-//                     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-//                     path        TEXT NOT NULL,
-//                     basename    TEXT NOT NULL
-//                 )"
-//             , (),
-//         )?;
-//     }
-//     Ok(())
-// }
-
-// pub fn check_if_table_exists(conn: &Connection) -> Result<bool> {
-//     // let conn: Connection = Connection::open(get_db_path())?; 
-
-//     let mut stmt = conn.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name= ?1")?; 
-//     stmt.exists(["entries"])
-// }
 
 fn insert_batch(entries: Vec<DirEntry>, tx: &Transaction) -> Result<()> {
     let mut stmt = tx.prepare("INSERT INTO entries (path, basename) VALUES (?1, ?2)")?;
@@ -162,18 +196,8 @@ fn insert_batch(entries: Vec<DirEntry>, tx: &Transaction) -> Result<()> {
     Ok(())
 }
 
-pub fn retrieve_entries() -> Vec<PathEntry> {
+pub fn retrieve_entries(conn: &Connection) -> Result<Vec<PathEntry>> {
     let mut entries: Vec<PathEntry> = Vec::new();
-
-    let conn: Connection = match get_database_connection() {
-        Ok(conn) => conn,
-        Err(e) => {
-            eprintln!(
-                    "[Error] Could not retrieve database connection: {}", e);
-                process::exit(1)
-        }
-    };
-
     let mut stmt = conn.prepare("SELECT path, basename from entries").unwrap();
     let entry_iter = stmt.query_map([], |row| {
         Ok(PathEntry {
@@ -187,11 +211,10 @@ pub fn retrieve_entries() -> Vec<PathEntry> {
         entries.push(entry.unwrap())
     }
     
-    return entries;
+    Ok(entries)
 }
 
 pub fn insert_entries(entries: Vec<DirEntry>, conn: &mut Connection) -> Result<()> {
-    // let mut conn: Connection = Connection::open(get_db_path())?;
     let tx = conn.transaction()?; 
 
     insert_batch(entries, &tx)?;
@@ -200,9 +223,7 @@ pub fn insert_entries(entries: Vec<DirEntry>, conn: &mut Connection) -> Result<(
     Ok(())
 }
 
-pub fn print_entries() -> Result<()> {
-    // let conn: Connection = Connection::open(get_db_path())?;
-    let conn: Connection = get_database_connection()?; 
+fn print_entries(conn: &Connection) -> Result<()> {
 
     let mut stmt = conn.prepare("SELECT path, basename from entries")?;
     let entry_iter = stmt.query_map([], |row| {
@@ -219,7 +240,7 @@ pub fn print_entries() -> Result<()> {
     Ok(())
 }
 
-pub fn delete_db() -> Result<()> {
-    fs::remove_file(DATABASE_FILE_PATH.as_os_str());
+pub fn delete_db() -> std::io::Result<()> {
+    fs::remove_file(DATABASE_FILE_PATH.as_os_str())?;
     Ok(())
 }

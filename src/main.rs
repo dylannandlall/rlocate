@@ -1,6 +1,7 @@
 use std::time::Instant;
 use clap::{Args, Parser, Subcommand};
-use walkdir::DirEntry;
+
+use crate::db::database_search;
 
 mod dir;
 mod db;
@@ -25,7 +26,6 @@ enum Commands {
     Reset,
 }
 
-
 #[derive(Args, Debug)]
 struct SearchArgs {
     #[arg(short, long, group = "file", conflicts_with = "basename")]
@@ -36,42 +36,6 @@ struct SearchArgs {
     basename: Option<String>,
 }
 
-fn locate_keyword_basename(keyword: String) {
-    let entries: Vec<db::PathEntry> = db::retrieve_entries();
-
-    for entry in entries {
-        let basename = entry.get_basename(); 
-        
-        if basename == keyword {
-            // We need to split the string on "/" and get a vector of string types
-            let directory: Vec<String> = entry.get_path()
-                                        .split("/")
-                                        .map(str::to_string)
-                                        .collect();
-            let directory = &directory[..directory.len() - 1].join("/");
-            let directory = format!("{directory}/");
-
-            println!("{}\x1b[31m{}\x1b[0m", directory, basename);
-        }
-    }
-}
-
-fn locate_keyword(keyword: String) {
-    // let entries: Vec<String> = db::retrieve_entries();
-    let entries: Vec<db::PathEntry> = db::retrieve_entries();
-
-    for entry in entries {
-        let entry = entry.get_path();
-        if entry.contains(&keyword) {
-            let start = entry.find(&keyword).unwrap();
-            let (left, right) = entry.split_at(start);
-            let (middle, right) = right.split_at(keyword.len());
-
-            println!("{}\x1b[31m{}\x1b[0m{}", left, middle, right);
-        }
-    }
-}
-
 fn main() {
     let now = Instant::now();
 
@@ -80,28 +44,41 @@ fn main() {
     if let Some(command) = args.command {
         match command {
             Commands::Updatedb => {
-                println!("Running the updatedb logic...");
+                println!("Updating database...");
                 let entries = dir::get_filepaths(); 
-                db::update_database(entries);
-                println!("Scanning filesystem and refreshing database... Done.");
+                db::database_handler(Some(entries), "updatedb").expect("Could not update database"); 
             }
 
             Commands::Debug => {
-                db::print_entries(); 
+                db::database_handler(None, "debug").expect("Could not debug database");
             }
 
             Commands::Reset => {
-                db::delete_db();
+                db::database_handler(None, "reset").expect("Could not delete database");
             }
         }
     }
     
     if args.search.keyword.is_some() {
-        locate_keyword(args.search.keyword.unwrap());
+        match database_search(args.search.keyword.unwrap(), "keyword") {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!(
+                    "[Error] Search for keyword has failed: {}", e);
+                std::process::exit(1) 
+            }
+        }
     }
     
     if args.search.basename.is_some() {
-        locate_keyword_basename(args.search.basename.unwrap());
+        match database_search(args.search.basename.unwrap(), "basename") {
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!(
+                    "[Error] Search for basename has failed: {}", e);
+                std::process::exit(1) 
+            }
+        }
     }
 
 
