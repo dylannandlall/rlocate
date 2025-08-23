@@ -9,10 +9,10 @@ use walkdir::{DirEntry, WalkDir};
 
 lazy_static! {
     static ref EXCLUDED_PATHS: Vec<PathBuf> = vec![
-        PathBuf::from("/boot"),
-        PathBuf::from("/dev"),
-        PathBuf::from("/root"),
-        PathBuf::from("/sys"),
+        // PathBuf::from("/boot"),
+        // PathBuf::from("/dev"),
+        // PathBuf::from("/root"),
+        // PathBuf::from("/sys"),
         PathBuf::from("/mnt"),
         PathBuf::from("/")
     ];
@@ -35,6 +35,8 @@ fn get_root_dir() -> Vec<DirEntry> {
             }
         }
     }
+
+    println!("{:?}", root_vec);
     return root_vec;
 }
 

@@ -172,25 +172,28 @@ fn insert_batch(entries: Vec<DirEntry>, tx: &Transaction) -> Result<()> {
     let mut stmt = tx.prepare("INSERT INTO entries (path, basename) VALUES (?1, ?2)")?;
 
     for entry in entries {
-        let e = PathEntry {
-            path: entry.path()
-                    .as_os_str()
-                    .to_str()
-                    .unwrap()
-                    .to_string(),
-            basename: entry.path()
-                        .file_name()
-                        .unwrap()
-                        .to_str()
-                        .unwrap()
-                        .to_string(),
-        };
+        if let Some(path_str) = entry.path().as_os_str().to_str() {
+            // .and_then() means if self is Some(value) then call the closure and pass value as f
+            // If self is None then .and_then() does not call the closure f and immediately returns None
+            // which is then handled by the "if let... else" statement
+            if let Some(basename_str) = entry.path().file_name().and_then(|f| f.to_str()) {
+                let e: PathEntry = PathEntry { 
+                    path: path_str.to_string(), 
+                    basename: basename_str.to_string()
+                };
 
-        match stmt.execute(params![&e.path, &e.basename]) {
-            Ok(_) => {}
-            Err(err) => {
-                println!("Failure to insert entry: {}", err);
+                match stmt.execute(params![&e.path, &e.basename]) {
+                    Ok(_) => {}
+                    Err(err) => {
+                        println!("Failure to insert entry: {}", err);
+                    }
+                }
+
+            } else {
+                eprintln!("[Issue] Skipping entry due to invalid filename: {:?}", entry.path());
             }
+        } else {
+            eprintln!("[Issue] Skipping entry due to invalid filename: {:?}", entry.path());
         }
     }
     Ok(())
